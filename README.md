@@ -9,4 +9,4 @@ This application
 
 To make a photo press a "p" key  
 To start and stop the video press a "v" key  
-To exit the prgram press a "e" key  
+To exit the program press a "e" key  

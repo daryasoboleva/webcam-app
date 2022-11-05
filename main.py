@@ -1,15 +1,19 @@
 import cv2
 import os.path
+import sys
+import numpy as np
 
 faceCascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
 cap = cv2.VideoCapture(0)
 
+hsv_min = np.array((0, 54, 5), np.uint8)
+hsv_max = np.array((187, 255, 253), np.uint8)
 counterPhoto = 0
 counterVideo = 0
 avi = cv2.VideoWriter_fourcc('M','J','P','G')
 mp4 = cv2.VideoWriter_fourcc(* 'XVID')
-# Получить информацию о размере кадра
+# Get information about size of frame
 frame_width = int(cap.get(3))
 frame_height = int(cap.get(4))
 frame_size = (frame_width, frame_height)
@@ -30,21 +34,42 @@ while True:
     cv2.imshow("CAMERA", frame)
     success, frameCopy = cap.read()
     frameGray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+
+    # Load image, grayscale, median blur, sharpen image
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.medianBlur(gray, 5)
+    sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    sharpen = cv2.filter2D(blur, -10, sharpen_kernel)
+
+    # Threshold and morph close
+    thresh = cv2.threshold(sharpen, 50, 255, cv2.THRESH_BINARY_INV)[1]
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    close = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=5)
+
+    # Find contours and filter using threshold area
+    cnts = cv2.findContours(close, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+    for c in cnts:
+        area = cv2.contourArea(c)
+        if area > 1900:
+            x, y, w, h = cv2.boundingRect(c)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (36, 255, 12), 2)
     faces = faceCascade.detectMultiScale(frameGray, 1.1, 19)
     for (x, y, w, h) in faces:
         cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 255), 2)
     cv2.imshow("CAMERA", frame)
     pressKey = cv2.waitKey(1)
-
     if pressKey & 0xFF == ord('e'):
-        print("Камера выключилась")
+        print("Camera off")
         break
     elif pressKey & 0xFF == ord('p'):
         if cv2.imwrite(f"Photos/photo_{counterPhoto}.png", frameCopy):
             f = open("PhotoCounter.txt", 'r')
             s = f.readline()
             counterPhoto = int(s[-1])
-            print("photo_" + str(counterPhoto) + ".png успешно сохранено")
+            print("photo_" + str(counterPhoto) + ".png saved successfully")
             f.close()
             f = open("PhotoCounter.txt", 'a')
             f.write(str(counterPhoto + 1))
@@ -61,17 +86,17 @@ while True:
                 f = open("videoCounter.txt", 'a')
                 f.write(str(counterVideo + 1))
                 f.close()
-                print("Началась запись video_" + str(counterVideo) + ".avi" )
+                print("Start record of video " + str(counterVideo) + ".avi" )
                 outputVideo.write(frameCopy)
                 Recording = True
             else:
-                print("Произошла ошибка")
+                print("Error")
                 outputVideo.release()
                 Recording = False
         else:
             if success:
                 outputVideo.write(frameCopy)
-            print("Запись video_" + str(counterVideo) + ".avi сохранена")
+            print("Record of video_" + str(counterVideo) + ".avi is saved")
             Recording = False
             outputVideo.release()
     elif Recording:
